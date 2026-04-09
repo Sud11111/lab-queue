@@ -432,7 +432,7 @@ function launchApp(){
       firebase.initializeApp({apiKey:FB_API_KEY, databaseURL:FB_DATABASE_URL});
     }
     const tempDb=firebase.database();
-    tempDb.ref('Config/taPasscode').once('value').then(snap=>{
+    tempDb.ref('Config/tapasscode').once('value').then(snap=>{
       const correct=snap.val();
       if(!correct){err.textContent='Could not fetch passcode. Check Firebase rules.';return;}
       if(entered!==correct){err.textContent='Incorrect passcode.';return;}
