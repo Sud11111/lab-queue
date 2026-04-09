@@ -200,11 +200,27 @@ input[type="file"] { display:none; }
 </head>
 <body>
 
-<!-- SESSION SELECTOR (TA only — students bypass via URL params) -->
-<div id="session-screen">
-  <div class="session-box">
-    <h1>EEC18LA Lab Queue</h1>
-    <p>Set up today's session. Students will use the link or QR code you share — they won't see this screen.</p>
+<!-- TA PASSCODE GATE -->
+<div id="session-screen" style="display:none;">
+
+  <!-- Step 1: Passcode entry -->
+  <div id="ta-gate" class="session-box">
+    <h1>TA / UGLA login</h1>
+    <p>Enter your passcode to set up today's session.</p>
+    <div style="margin-bottom:1rem;">
+      <input type="password" id="ta-pass-input" placeholder="Passcode" style="width:100%;font-size:14px;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);" onkeydown="if(event.key==='Enter')verifyPasscode()" />
+    </div>
+    <button class="btn-primary" style="width:100%;" onclick="verifyPasscode()">Verify passcode</button>
+    <div id="gate-err" style="font-size:12px;color:var(--red-txt);margin-top:8px;min-height:14px;"></div>
+    <div style="margin-top:1rem;text-align:center;">
+      <button onclick="goToStudentView()" style="font-size:12px;color:var(--text2);background:none;border:none;cursor:pointer;text-decoration:underline;">Back to student view</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Session picker (shown after passcode verified) -->
+  <div id="ta-setup" class="session-box" style="display:none;">
+    <h1>Set up session</h1>
+    <p>Students will use the QR code you share — they won't see this screen.</p>
     <div class="sel-row">
       <div class="sel-group">
         <label>Lab #</label>
@@ -225,13 +241,10 @@ input[type="file"] { display:none; }
         </select>
       </div>
     </div>
-    <div style="margin-bottom:1rem;">
-      <input type="password" id="ta-pass-input" placeholder="TA/UGLA passcode" style="width:100%;font-size:14px;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);" />
-      <div style="font-size:12px;color:var(--text3);margin-top:4px;">Enter your passcode to manage the queue.</div>
-    </div>
-    <button class="btn-primary" style="width:100%;" onclick="launchApp()">Launch session</button>
+    <button class="btn-primary" style="width:100%;margin-top:0.5rem;" onclick="launchApp()">Launch session</button>
     <div id="session-err" style="font-size:12px;color:var(--red-txt);margin-top:8px;min-height:14px;"></div>
   </div>
+
 </div>
 
 <!-- MAIN APP -->
@@ -251,7 +264,7 @@ input[type="file"] { display:none; }
     </div>
     <div class="nav-right">
       <span class="session-tag" id="session-tag"></span>
-      <button class="change-btn" onclick="if(confirm('Return to session selector?'))location.reload()">Change</button>
+      <button class="change-btn" onclick="showTAPasscodePage()">TA / UGLA dashboard</button>
     </div>
   </nav>
 
@@ -419,38 +432,73 @@ function badgeHtml(t){
 
 // ---- Session selector ----
 
-function launchApp(){
-  const lab=document.getElementById('sel-lab').value;
-  const section=document.getElementById('sel-section').value;
-  const err=document.getElementById('session-err');
+// Verified passcode stored in memory only (never in URL)
+let taVerified = false;
+
+function initFirebase(){
+  if(!firebase.apps.length){
+    firebase.initializeApp({apiKey:FB_API_KEY, databaseURL:FB_DATABASE_URL});
+  }
+  return firebase.database();
+}
+
+function verifyPasscode(){
   const entered=document.getElementById('ta-pass-input').value;
+  const err=document.getElementById('gate-err');
   if(!entered){err.textContent='Please enter your passcode.';return;}
   err.textContent='Verifying…';
-  // Init Firebase temporarily just to read the passcode
   try {
-    if(!firebase.apps.length){
-      firebase.initializeApp({apiKey:FB_API_KEY, databaseURL:FB_DATABASE_URL});
-    }
-    const tempDb=firebase.database();
+    const tempDb=initFirebase();
     tempDb.ref('Config/tapasscode').once('value').then(snap=>{
       const correct=snap.val();
       if(!correct){err.textContent='Could not fetch passcode. Check Firebase rules.';return;}
       if(entered!==correct){err.textContent='Incorrect passcode.';return;}
-      isTA=true;
-      const base=location.href.split('?')[0];
-      location.href=`${base}?lab=${lab}&sec=${section}&ta=1`;
+      err.textContent='';
+      taVerified=true;
+      // Show session picker, hide passcode gate
+      document.getElementById('ta-gate').style.display='none';
+      document.getElementById('ta-setup').style.display='block';
     }).catch(e=>{ err.textContent='Firebase error: '+e.message; });
   } catch(e){ err.textContent='Connection error: '+e.message; }
+}
+
+function launchApp(){
+  if(!taVerified){return;}
+  const lab=document.getElementById('sel-lab').value;
+  const section=document.getElementById('sel-section').value;
+  // Store TA status in sessionStorage (tab only, not URL)
+  sessionStorage.setItem('isTA','1');
+  sessionStorage.setItem('lab',lab);
+  sessionStorage.setItem('sec',section);
+  const base=location.href.split('?')[0];
+  location.href=`${base}?lab=${lab}&sec=${section}`;
+}
+
+function showTAPasscodePage(){
+  // Hide app, show passcode gate
+  document.getElementById('app').style.display='none';
+  document.getElementById('ta-gate').style.display='block';
+  document.getElementById('ta-setup').style.display='none';
+  document.getElementById('ta-pass-input').value='';
+  document.getElementById('gate-err').textContent='';
+  document.getElementById('session-screen').style.display='flex';
+  taVerified=false;
+}
+
+function goToStudentView(){
+  sessionStorage.removeItem('isTA');
+  const params=new URLSearchParams(location.search);
+  const lab=params.get('lab')||'1';
+  const sec=params.get('sec')||'1';
+  document.getElementById('session-screen').style.display='none';
+  launchFromParams(lab,sec,false);
 }
 
 function launchFromParams(lab, section, taMode){
   sessionPath=`lab${lab}_sec${section}`;
   isTA=taMode;
   try {
-    if(!firebase.apps.length){
-      firebase.initializeApp({apiKey:FB_API_KEY, databaseURL:FB_DATABASE_URL});
-    }
-    db=firebase.database();
+    db=initFirebase();
     db.ref('.info/connected').on('value',snap=>{
       document.getElementById('sync-dot').className='sync-dot'+(snap.val()?' live':'');
     });
@@ -858,11 +906,14 @@ setInterval(()=>{if(queue.length)renderQueue();if(pending.length)renderPending()
   const params=new URLSearchParams(location.search);
   const lab=params.get('lab');
   const sec=params.get('sec');
-  const ta=params.get('ta')==='1';
+  // TA status comes from sessionStorage only — never from URL
+  const ta=sessionStorage.getItem('isTA')==='1';
   if(lab&&sec){
     launchFromParams(lab,sec,ta);
+  } else {
+    // No params — show TA setup screen directly
+    document.getElementById('session-screen').style.display='flex';
   }
-  // else: show session screen for TA setup
 })();
 </script>
 </body>
