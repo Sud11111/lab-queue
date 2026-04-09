@@ -438,7 +438,7 @@ function launchApp(){
       if(entered!==correct){err.textContent='Incorrect passcode.';return;}
       isTA=true;
       const base=location.href.split('?')[0];
-      location.href=`${base}?lab=${lab}&sec=${section}`;
+      location.href=`${base}?lab=${lab}&sec=${section}&ta=1`;
     }).catch(e=>{ err.textContent='Firebase error: '+e.message; });
   } catch(e){ err.textContent='Connection error: '+e.message; }
 }
@@ -858,9 +858,9 @@ setInterval(()=>{if(queue.length)renderQueue();if(pending.length)renderPending()
   const params=new URLSearchParams(location.search);
   const lab=params.get('lab');
   const sec=params.get('sec');
+  const ta=params.get('ta')==='1';
   if(lab&&sec){
-    // Student mode — go straight in, no passcode needed
-    launchFromParams(lab,sec,false);
+    launchFromParams(lab,sec,ta);
   }
   // else: show session screen for TA setup
 })();
